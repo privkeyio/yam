@@ -22,6 +22,25 @@ Endianness: Bitcoin is Little-Endian. Always use std.mem.readInt(u32, bytes, .li
 
 Error Handling: Use Zig's try, catch, and errdefer patterns. No panic in networking code; handle socket timeouts and malformed packets gracefully.
 
+Writing to stdout:
+
+Use this as reference for writing to stdout in zig 0.15.2:
+
+```zig
+pub fn main() !void {
+    var stdout_buffer: [4096]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    try stdout.print("did you ever hear the tragedy of darth plagueis the wise?\n", .{});
+
+    // Required to push buffered output to the terminal
+    try stdout.flush();
+}
+```
+
+Look at writergate PR: https://github.com/ziglang/zig/pull/24329
+
 4. Bitcoin Protocol Context
 Mainnet Magic: 0xD9B4BEF9
 
