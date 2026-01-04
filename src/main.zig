@@ -4,6 +4,7 @@ const scout = @import("scout.zig");
 const Courier = @import("courier.zig").Courier;
 const relay = @import("relay.zig");
 const Relay = relay.Relay;
+const Explorer = @import("explorer.zig").Explorer;
 
 const CliArgs = struct {
     tx_hex: ?[]const u8 = null,
@@ -41,8 +42,10 @@ pub fn main() !void {
     } else if (args.tx_hex != null) {
         try broadcastTransaction(allocator, args);
     } else {
-        std.debug.print("Error: No mode specified. Use --tx <hex> to broadcast or --listen for mempool.\n", .{});
-        std.debug.print("Run with --help for usage information.\n", .{});
+        // Default: Interactive explore mode
+        var explorer = try Explorer.init(allocator);
+        defer explorer.deinit();
+        try explorer.run();
     }
 }
 

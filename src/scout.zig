@@ -8,7 +8,6 @@ const yam = @import("root.zig");
 const dns_seeds = [_][]const u8{
     "seed.bitcoin.sipa.be",
     "dnsseed.bluematt.me",
-    "dnsseed.bitcoin.dashjr-list-hierarchical.us",
     "seed.bitcoinstats.com",
     "seed.bitcoin.jonasschnelli.ch",
     "seed.btc.petertodd.net",

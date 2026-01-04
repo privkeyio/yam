@@ -39,7 +39,7 @@ pub fn main() !void {
 }
 ```
 
-Look at writergate PR: https://github.com/ziglang/zig/pull/24329
+Look at writergate PR: https://github.com/ziglang/zig/pull/24329bui
 
 4. Bitcoin Protocol Context
 Mainnet Magic: 0xD9B4BEF9
@@ -65,7 +65,6 @@ Theming: Internal modules should use military-history metaphors where appropriat
 
 Memory Safety: Be explicit about memory ownership. If a function allocates, it must take an Allocator as a parameter.
 
-6. Current Task Focus
-Active Goal: Establishing the initial version message handshake with a Bitcoin node.
+Writers: write to stdout for any production output and use a shared buffered stdout writer.
 
-Next Step: Implementing a SOCKS5 proxy wrapper for anonymous connection.
+Connections: This tools is meant to operate with persistent connections to any node it connects to. If opening a connection it should stay open such that peer nodes can be communicated with via inv messages, getaddr messages, etc. 
