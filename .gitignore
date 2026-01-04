@@ -25,3 +25,8 @@ Thumbs.db
 *.exe
 # Any raw hex transaction files you use for testing
 test_tx_*.hex
+
+
+# --- Exported Data ---
+mempool_*.csv
+nodes_*.csv
