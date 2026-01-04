@@ -1,6 +1,6 @@
-# yam
+# Yam
 
-Bitcoin P2P network tool. Connect to nodes, broadcast transactions, observe mempool propagation.
+Lightweight Bitcoin P2P CLI network tool. Connect to nodes, observe mempool propagation, export data, and broadcast transactions (experimental).
 
 ## Build
 
@@ -77,7 +77,7 @@ Status:
 > q                     # quit
 ```
 
-### Broadcast Mode
+### Broadcast Mode (still WIP)
 
 ```
 ./zig-out/bin/yam broadcast <tx_hex> [options]
