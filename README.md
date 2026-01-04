@@ -27,10 +27,10 @@ disconnect, dc <n>     Disconnect from node(s)
 stream <n> on|off      Toggle message streaming
 getaddr, ga [n...]     Request addresses (all if no args)
 ping [n...]            Measure latency (all if no args)
-graph                  Show network graph
+graph                  Show peer advertisement graph
 mempool, mp            Show observed mempool transactions
 status, s              Show connection status
-export, x <nodes|mempool>  Export data to CSV
+export, x <nodes|mempool|graph> [csv|dot]  Export data
 help, h, ?             Show this help
 quit, q                Exit
 ```
@@ -69,6 +69,8 @@ Status:
 
 > export nodes          # export to nodes_2025-01-04_143052.csv
 > export mempool        # export to mempool_2025-01-04_143052.csv
+> export graph          # export to graph_2025-01-04_143052.csv
+> export graph dot      # export to graph_2025-01-04_143052.dot (graphviz)
 
 > stream 1 on           # watch raw messages from node 1
 > dc 1                  # disconnect node 1
@@ -115,3 +117,16 @@ abc123...,162.220.94.10:8333,/Satoshi:28.0.0/,1704384001
 ```
 
 Each row is one announcement. Same txid appears multiple times if announced by multiple nodes.
+
+**graph.csv**
+```
+source,target
+172.7.56.107:8333,10.0.0.1:8333
+172.7.56.107:8333,10.0.0.2:8333
+```
+
+## Graph
+
+The `graph` command shows which peers were advertised by which nodes via `getaddr` responses. An edge `A <- B` means node B included node A in its address response.
+
+This does **not** show actual connections between nodes. Bitcoin nodes return a random subset of their address database when responding to `getaddr`, not their current connections. The graph is more of a curiosity for exploring network topology than a reliable map of the network.
