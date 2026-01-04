@@ -209,6 +209,16 @@ pub const Explorer = struct {
         var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
         const stdout = &stdout_writer.interface;
 
+        // Set terminal to raw mode for character-by-character input
+        const stdin_fd = std.fs.File.stdin().handle;
+        const original_termios = try std.posix.tcgetattr(stdin_fd);
+        var raw_termios = original_termios;
+        // Disable canonical mode and echo
+        raw_termios.lflag.ICANON = false;
+        raw_termios.lflag.ECHO = false;
+        try std.posix.tcsetattr(stdin_fd, .FLUSH, raw_termios);
+        defer std.posix.tcsetattr(stdin_fd, .FLUSH, original_termios) catch {};
+
         // Try to raise file descriptor limit
         const fd_limit = raiseFileDescriptorLimit();
         try stdout.print("{s}Yam Explorer{s} - type 'help' for commands\n", .{ Color.green, Color.reset });
@@ -228,17 +238,32 @@ pub const Explorer = struct {
                 var byte_buf: [1]u8 = undefined;
                 const n = std.fs.File.stdin().read(&byte_buf) catch break;
                 if (n == 0) break;
-                if (byte_buf[0] == '\n') break;
-                line_buf[line_len] = byte_buf[0];
+                const c = byte_buf[0];
+                if (c == '\n') break;
+                // Handle backspace (0x7F) and delete (0x08)
+                if (c == 0x7F or c == 0x08) {
+                    if (line_len > 0) {
+                        line_len -= 1;
+                        // Erase character on screen: backspace, space, backspace
+                        try stdout.writeAll("\x08 \x08");
+                        try stdout.flush();
+                    }
+                    continue;
+                }
+                // Ignore other control characters
+                if (c < 32 and c != '\t') continue;
+                // Echo the character
+                try stdout.writeByte(c);
+                try stdout.flush();
+                line_buf[line_len] = c;
                 line_len += 1;
             }
 
-            if (line_len == 0) {
-                var check_buf: [1]u8 = undefined;
-                const check = std.fs.File.stdin().read(&check_buf) catch break;
-                if (check == 0) break;
-                continue;
-            }
+            // Echo newline
+            try stdout.writeByte('\n');
+            try stdout.flush();
+
+            if (line_len == 0) continue;
 
             const line = line_buf[0..line_len];
 
@@ -649,9 +674,24 @@ pub const Explorer = struct {
             return;
         }
 
-        try stdout.print("Network graph ({s}{d}{s} edges):\n", .{ Color.dim, self.edges.items.len, Color.reset });
+        // Build output in buffer for potential paging
+        var output = std.ArrayList(u8).empty;
+        defer output.deinit(self.allocator);
+        const writer = output.writer(self.allocator);
+
+        try writer.print("Network graph ({s}{d}{s} edges):\n", .{ Color.dim, self.edges.items.len, Color.reset });
         for (self.edges.items) |edge| {
-            try stdout.print("  {s} {s}<-{s} {s}\n", .{ edge.node, Color.dim, Color.reset, edge.source });
+            try writer.print("  {s} {s}<-{s} {s}\n", .{ edge.node, Color.dim, Color.reset, edge.source });
+        }
+
+        // Use pager for long output
+        const line_count = std.mem.count(u8, output.items, "\n");
+        if (line_count > 30) {
+            pipeToLess(output.items) catch {
+                try stdout.writeAll(output.items);
+            };
+        } else {
+            try stdout.writeAll(output.items);
         }
     }
 
@@ -762,9 +802,10 @@ pub const Explorer = struct {
             \\
         , .{
             Color.dim,    Color.reset,
-            Color.green,  connected, total_nodes,
-            Color.yellow, connecting,
-            Color.red,    failed, other,
+            Color.green,  connected,
+            total_nodes,  Color.yellow,
+            connecting,   Color.red,
+            failed,       other,
             tx_with_data, mempool_size,
         });
     }
@@ -829,7 +870,7 @@ pub const Explorer = struct {
 
     fn cmdExport(self: *Explorer, iter: *std.mem.TokenIterator(u8, .scalar), stdout: anytype) !void {
         const export_type = iter.next() orelse {
-            try stdout.print("Usage: {s}export <nodes|mempool>{s}\n", .{ Color.dim, Color.reset });
+            try stdout.print("Usage: {s}export <nodes|mempool|graph> [csv|dot]{s}\n", .{ Color.dim, Color.reset });
             return;
         };
 
@@ -837,9 +878,18 @@ pub const Explorer = struct {
             try self.exportNodes(stdout);
         } else if (std.mem.eql(u8, export_type, "mempool")) {
             try self.exportMempool(stdout);
+        } else if (std.mem.eql(u8, export_type, "graph")) {
+            const format = iter.next() orelse "csv";
+            if (std.mem.eql(u8, format, "csv")) {
+                try self.exportGraphCSV(stdout);
+            } else if (std.mem.eql(u8, format, "dot")) {
+                try self.exportGraphDOT(stdout);
+            } else {
+                try stdout.print("Unknown format: {s}. Use 'csv' or 'dot'\n", .{format});
+            }
         } else {
             try stdout.print("Unknown export type: {s}\n", .{export_type});
-            try stdout.print("Usage: {s}export <nodes|mempool>{s}\n", .{ Color.dim, Color.reset });
+            try stdout.print("Usage: {s}export <nodes|mempool|graph> [csv|dot]{s}\n", .{ Color.dim, Color.reset });
         }
     }
 
@@ -969,6 +1019,77 @@ pub const Explorer = struct {
         });
     }
 
+    fn exportGraphCSV(self: *Explorer, stdout: anytype) !void {
+        if (self.edges.items.len == 0) {
+            try stdout.print("No edges to export. Run {s}getaddr{s} first.\n", .{ Color.yellow, Color.reset });
+            return;
+        }
+
+        const filename = try self.makeTimestampedFilename("graph", "csv");
+        defer self.allocator.free(filename);
+
+        const file = std.fs.cwd().createFile(filename, .{}) catch |err| {
+            try stdout.print("{s}Error creating file:{s} {s}\n", .{ Color.red, Color.reset, @errorName(err) });
+            return;
+        };
+        defer file.close();
+
+        var buf: [4096]u8 = undefined;
+        var file_writer = file.writer(&buf);
+        const writer = &file_writer.interface;
+
+        // Write CSV header
+        try writer.writeAll("source,target\n");
+
+        for (self.edges.items) |edge| {
+            try writer.print("{s},{s}\n", .{ edge.source, edge.node });
+        }
+
+        try writer.flush();
+        try stdout.print("Exported {s}{d}{s} edges to {s}{s}{s}\n", .{
+            Color.green, self.edges.items.len, Color.reset,
+            Color.green, filename,             Color.reset,
+        });
+    }
+
+    fn exportGraphDOT(self: *Explorer, stdout: anytype) !void {
+        if (self.edges.items.len == 0) {
+            try stdout.print("No edges to export. Run {s}getaddr{s} first.\n", .{ Color.yellow, Color.reset });
+            return;
+        }
+
+        const filename = try self.makeTimestampedFilename("graph", "dot");
+        defer self.allocator.free(filename);
+
+        const file = std.fs.cwd().createFile(filename, .{}) catch |err| {
+            try stdout.print("{s}Error creating file:{s} {s}\n", .{ Color.red, Color.reset, @errorName(err) });
+            return;
+        };
+        defer file.close();
+
+        var buf: [4096]u8 = undefined;
+        var file_writer = file.writer(&buf);
+        const writer = &file_writer.interface;
+
+        // Write DOT format
+        try writer.writeAll("digraph node_getaddr_graph {\n");
+        try writer.writeAll("  rankdir=LR;\n");
+        try writer.writeAll("  node [shape=box];\n\n");
+
+        for (self.edges.items) |edge| {
+            try writer.print("  \"{s}\" -> \"{s}\";\n", .{ edge.source, edge.node });
+        }
+
+        try writer.writeAll("}\n");
+
+        try writer.flush();
+        try stdout.print("Exported {s}{d}{s} edges to {s}{s}{s}\n", .{
+            Color.green, self.edges.items.len, Color.reset,
+            Color.green, filename,             Color.reset,
+        });
+        try stdout.print("View at: {s}https://dreampuf.github.io/GraphvizOnline/{s}\n", .{ Color.dim, Color.reset });
+    }
+
     fn makeTimestampedFilename(self: *Explorer, prefix: []const u8, ext: []const u8) ![]u8 {
         const now = std.time.timestamp();
 
@@ -1023,7 +1144,7 @@ pub const Explorer = struct {
             \\  {0s}graph{1s}                  Show network graph
             \\  {0s}mempool, mp{1s}            Show observed mempool transactions
             \\  {0s}status, s{1s}              Show connection status
-            \\  {0s}export, x{1s} <nodes|mempool>  Export data to CSV
+            \\  {0s}export, x{1s} <nodes|mempool|graph> [csv|dot]  Export data
             \\  {0s}help, h, ?{1s}             Show this help
             \\  {0s}quit, q{1s}                Exit
             \\
@@ -1447,8 +1568,8 @@ pub const Explorer = struct {
                             var stdout_writer = self.stdout.writer(&buf);
                             const stdout = &stdout_writer.interface;
                             stdout.print("{s}[{d}]{s} pong: {s}{d}ms{s}\n{s}>{s} ", .{
-                                Color.dim, node_index, Color.reset,
-                                Color.green, latency, Color.reset,
+                                Color.dim,   node_index,  Color.reset,
+                                Color.green, latency,     Color.reset,
                                 Color.green, Color.reset,
                             }) catch {};
                             stdout.flush() catch {};
@@ -1566,7 +1687,7 @@ pub const Explorer = struct {
             var stdout_writer = self.stdout.writer(&buf);
             const stdout = &stdout_writer.interface;
             stdout.print("{s}[{d}]{s} inv: {d} tx ({s}{d}{s} new)\n{s}>{s} ", .{
-                Color.dim,   node_index, Color.reset,
+                Color.dim,   node_index,  Color.reset,
                 tx_count,    Color.green, new_tx_count,
                 Color.reset, Color.green, Color.reset,
             }) catch {};

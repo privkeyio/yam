@@ -30,3 +30,5 @@ test_tx_*.hex
 # --- Exported Data ---
 mempool_*.csv
 nodes_*.csv
+graph_*.csv
+graph_*.dot

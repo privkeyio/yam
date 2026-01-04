@@ -180,20 +180,22 @@ fn broadcastTransaction(allocator: std.mem.Allocator, args: BroadcastArgs) !void
     }
     defer peer_list.deinit(allocator);
 
-    // Select peers
-    const selected_peers = try scout.selectRandomPeers(allocator, peer_list.items, args.peer_count);
+    // Select more peers than needed since some connections will fail
+    // Try to connect to 2x the requested count
+    const connect_count = args.peer_count * 2;
+    const selected_peers = try scout.selectRandomPeers(allocator, peer_list.items, connect_count);
     defer allocator.free(selected_peers);
 
-    std.debug.print("\nSelected {d} peers for broadcast\n", .{selected_peers.len});
+    std.debug.print("\nSelected {d} peers to attempt connection (targeting {d} for broadcast)\n", .{ selected_peers.len, args.peer_count });
 
     // Initialize relay
     var r = try Relay.init(selected_peers, allocator);
     defer r.deinit();
 
-    // Connect to all peers
+    // Connect to peers (stops once we have enough)
     std.debug.print("\n=== Connecting to Peers ===\n", .{});
-    const connected = r.connectAll();
-    std.debug.print("\nSuccessfully connected to {d}/{d} peers\n", .{ connected, selected_peers.len });
+    const connected = r.connectAll(args.peer_count);
+    std.debug.print("\nSuccessfully connected to {d} peers (target: {d})\n", .{ connected, args.peer_count });
 
     if (connected == 0) {
         std.debug.print("Error: No peers connected, aborting broadcast\n", .{});
@@ -206,9 +208,10 @@ fn broadcastTransaction(allocator: std.mem.Allocator, args: BroadcastArgs) !void
     std.debug.print("Peers: {d}\n", .{connected});
     std.debug.print("Timing: {s}\n", .{if (args.timing == .staggered_random) "staggered (privacy mode)" else "simultaneous"});
 
-    // Broadcast transaction
+    // Broadcast transaction (stop after peer_count successful broadcasts)
     var result = try r.broadcastTx(tx_bytes, .{
         .strategy = args.timing,
+        .max_peers = args.peer_count,
     });
     defer result.deinit(allocator);
 
