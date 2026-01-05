@@ -37,7 +37,7 @@ ping [n...]            Measure latency (all if no args)
 graph                  Show peer advertisement graph
 mempool, mp            Show observed mempool transactions
 status, s              Show connection status
-export, x <nodes|mempool|graph> [csv|dot]  Export data
+export, x <nodes|mempool|graph|tx> [csv|dot|txid]  Export data
 help, h, ?             Show this help
 quit, q                Exit
 ```

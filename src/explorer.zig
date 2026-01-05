@@ -1217,7 +1217,7 @@ pub const Explorer = struct {
             \\  {0s}graph{1s}                  Show network graph
             \\  {0s}mempool, mp{1s}            Show observed mempool transactions
             \\  {0s}status, s{1s}              Show connection status
-            \\  {0s}export, x{1s} <nodes|mempool|graph|tx> [format|txid]  Export data
+            \\  {0s}export, x{1s} <nodes|mempool|graph|tx> [csv|dot|txid]  Export data
             \\  {0s}help, h, ?{1s}             Show this help
             \\  {0s}quit, q{1s}                Exit
             \\
