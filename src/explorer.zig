@@ -52,11 +52,16 @@ pub const Connection = struct {
 /// Metadata about a node discovered during connection
 pub const NodeMetadata = struct {
     user_agent: ?[]const u8 = null,
+    services: u64 = 0,
     ever_connected: bool = false,
     latency_ms: ?u64 = null,
     pending_ping_time: ?i64 = null,
     pending_ping_nonce: ?u64 = null,
-    // Future: services, protocol_version, start_height, etc.
+    // Future: protocol_version, start_height, etc.
+
+    pub fn canServeWitnesses(self: NodeMetadata) bool {
+        return (self.services & yam.ServiceFlags.NODE_WITNESS) != 0;
+    }
 
     pub fn deinit(self: *NodeMetadata, allocator: std.mem.Allocator) void {
         if (self.user_agent) |ua| {
@@ -907,7 +912,7 @@ pub const Explorer = struct {
             try self.exportTx(txid, stdout);
         } else {
             try stdout.print("Unknown export type: {s}\n", .{export_type});
-            try stdout.print("Usage: {s}export <nodes|mempool|graph> [csv|dot]{s}\n", .{ Color.dim, Color.reset });
+            try stdout.print("Usage: {s}export <nodes|mempool|graph|tx> [csv|dot|txid]{s}\n", .{ Color.dim, Color.reset });
         }
     }
 
@@ -1212,7 +1217,7 @@ pub const Explorer = struct {
             \\  {0s}graph{1s}                  Show network graph
             \\  {0s}mempool, mp{1s}            Show observed mempool transactions
             \\  {0s}status, s{1s}              Show connection status
-            \\  {0s}export, x{1s} <nodes|mempool|graph|tx> [csv|dot|txid]  Export data
+            \\  {0s}export, x{1s} <nodes|mempool|graph|tx> [format|txid]  Export data
             \\  {0s}help, h, ?{1s}             Show this help
             \\  {0s}quit, q{1s}                Exit
             \\
@@ -1573,6 +1578,7 @@ pub const Explorer = struct {
                             e.value_ptr.* = .{};
                         }
                         e.value_ptr.user_agent = ua;
+                        e.value_ptr.services = version_msg.services;
                     } else {
                         self.allocator.free(ua);
                     }
@@ -1739,9 +1745,10 @@ pub const Explorer = struct {
                     };
                     new_tx_count += 1;
 
-                    // Request the full transaction with witness data
+                    // Request the full transaction (with witness if peer supports it)
+                    const use_witness = if (self.node_metadata.get(node_index)) |m| m.canServeWitnesses() else false;
                     tx_invs.append(self.allocator, .{
-                        .type = .msg_witness_tx,
+                        .type = if (use_witness) .msg_witness_tx else inv.type,
                         .hash = inv.hash,
                     }) catch {};
                 }
