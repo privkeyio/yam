@@ -89,6 +89,8 @@ pub const WsFrame = struct {
             127 => {
                 if (data.len < 9) return error.SplitBuffer;
                 const len64 = std.mem.readInt(u64, data[1..9], .big);
+                if (len64 > 16 * 1024 * 1024) return error.TooBigPayload;
+                if (len64 > std.math.maxInt(usize)) return error.TooBigPayload;
                 return .{ @intCast(len64), 9 };
             },
             else => return .{ len, 1 },
@@ -125,18 +127,18 @@ pub fn writeText(stream: net.Stream, data: []const u8) !void {
     var header: [10]u8 = undefined;
     header[0] = 0x81; // FIN=1, opcode=text
 
-    const header_len: usize = if (data.len < 126) blk: {
+    var header_len: usize = 2;
+    if (data.len < 126) {
         header[1] = @intCast(data.len);
-        break :blk 2;
-    } else if (data.len < 65536) blk: {
+    } else if (data.len < 65536) {
         header[1] = 126;
         std.mem.writeInt(u16, header[2..4], @intCast(data.len), .big);
-        break :blk 4;
-    } else blk: {
+        header_len = 4;
+    } else {
         header[1] = 127;
         std.mem.writeInt(u64, header[2..10], data.len, .big);
-        break :blk 10;
-    };
+        header_len = 10;
+    }
 
     var iovecs = [_]std.posix.iovec_const{
         .{ .base = &header, .len = header_len },

@@ -35,7 +35,7 @@ pub const BanRecord = struct {
     reason: []const u8,
 };
 
-pub const BanEntry = BanRecord;
+pub const BanEntry = BanRecord; // TODO: remove alias once all callers use BanRecord
 
 pub const PersistentState = struct {
     version: u32 = 1,
@@ -340,10 +340,12 @@ pub const DashboardState = struct {
         return false;
     }
 
-    pub fn registerClient(self: *DashboardState, stream: net.Stream) void {
+    pub fn registerClient(self: *DashboardState, stream: net.Stream) bool {
         self.ws_mutex.lock();
         defer self.ws_mutex.unlock();
-        self.ws_clients.append(self.allocator, stream) catch {};
+        if (self.ws_clients.items.len >= self.config.max_ws_clients) return false;
+        self.ws_clients.append(self.allocator, stream) catch return false;
+        return true;
     }
 
     pub fn unregisterClient(self: *DashboardState, stream: net.Stream) void {

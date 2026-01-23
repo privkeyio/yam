@@ -97,7 +97,7 @@ fn writeUserAgents(state: *DashboardState, writer: anytype) !void {
     try writer.writeAll("},");
 }
 
-fn writeEscapedString(writer: anytype, str: []const u8) !void {
+pub fn writeEscapedString(writer: anytype, str: []const u8) !void {
     try writer.writeByte('"');
     for (str) |c| {
         switch (c) {

@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Yam - Bitcoin P2P Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" integrity="sha384-jb8JQMbMoBUzgWatfe6COACi2ljcDdZQ2OxczGA3bGNeWe+6DChMTBJemed7ZnvJ" crossorigin="anonymous"></script>
+    <script src="https://d3js.org/d3.v7.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
     <style>
         :root {
             --bg: #1a1a2e;
@@ -1303,7 +1303,7 @@
         function getGeoApiUrl(ip) {
             if (appSettings.geoApi === 'none') return null;
             if (appSettings.geoApi === 'ipinfo') return `https://ipinfo.io/${ip}/json`;
-            return `http://ip-api.com/json/${ip}`;
+            return `https://ip-api.com/json/${ip}`;
         }
 
         function initTheme() {
@@ -1468,7 +1468,7 @@
             const ip = geoQueue.shift();
             const url = appSettings.geoApi === 'ipinfo'
                 ? `https://ipinfo.io/${ip}/json`
-                : `http://ip-api.com/json/${ip}?fields=status,lat,lon,country,city`;
+                : `https://ip-api.com/json/${ip}?fields=status,lat,lon,country,city`;
             fetch(url)
                 .then(r => r.json())
                 .then(d => {

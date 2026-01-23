@@ -7,21 +7,7 @@ const json_mod = @import("json.zig");
 
 const DashboardState = state_mod.DashboardState;
 
-fn writeEscapedJsonString(writer: anytype, str: []const u8) !void {
-    try writer.writeByte('"');
-    for (str) |c| {
-        switch (c) {
-            '"' => try writer.writeAll("\\\""),
-            '\\' => try writer.writeAll("\\\\"),
-            '\n' => try writer.writeAll("\\n"),
-            '\r' => try writer.writeAll("\\r"),
-            '\t' => try writer.writeAll("\\t"),
-            0x00...0x08, 0x0b, 0x0c, 0x0e...0x1f => try writer.print("\\u{x:0>4}", .{c}),
-            else => try writer.writeByte(c),
-        }
-    }
-    try writer.writeByte('"');
-}
+const writeEscapedJsonString = json_mod.writeEscapedString;
 
 pub fn handleStatus(allocator: std.mem.Allocator, state: *DashboardState, stream: net.Stream) !void {
     const json = json_mod.buildStatusJson(state) catch
@@ -130,9 +116,11 @@ pub fn handleBannedList(allocator: std.mem.Allocator, state: *DashboardState, st
         if (entry.value_ptr.expiry_time != 0 and entry.value_ptr.expiry_time <= now) continue;
         if (!first) try writer.writeByte(',');
         first = false;
-        try writer.print("{{\"addr\":\"{s}\",\"expiry\":{d},\"reason\":\"{s}\"}}", .{
-            entry.value_ptr.addr, entry.value_ptr.expiry_time, entry.value_ptr.reason,
-        });
+        try writer.writeAll("{\"addr\":");
+        try writeEscapedJsonString(writer, entry.value_ptr.addr);
+        try writer.print(",\"expiry\":{d},\"reason\":", .{entry.value_ptr.expiry_time});
+        try writeEscapedJsonString(writer, entry.value_ptr.reason);
+        try writer.writeByte('}');
     }
     try writer.writeAll("]}");
     const body = try json.toOwnedSlice(allocator);

@@ -190,15 +190,16 @@ pub const Dashboard = struct {
         const key = http.extractHeader(req_data, "Sec-WebSocket-Key:") orelse return;
         const accept = ws.secAccept(std.mem.trim(u8, key, " \t\r\n"));
 
-        var response_buf: [256]u8 = undefined;
-        const response = try std.fmt.bufPrint(&response_buf,
-            "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {s}\r\n\r\n", .{&accept});
-        try conn.stream.writeAll(response);
-
-        self.state.registerClient(conn.stream);
+        if (!self.state.registerClient(conn.stream)) {
+            try http.sendResponse(conn.stream, 503, "text/plain", "Too many WebSocket clients");
+            return;
+        }
         defer self.state.unregisterClient(conn.stream);
 
-        // Send initial status
+        var response_buf: [256]u8 = undefined;
+        const response = try std.fmt.bufPrint(&response_buf, "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: {s}\r\n\r\n", .{&accept});
+        try conn.stream.writeAll(response);
+
         if (json.buildStatusJson(self.state)) |status_json| {
             defer self.state.allocator.free(status_json);
             ws.writeText(conn.stream, status_json) catch {};
@@ -231,12 +232,7 @@ pub const Dashboard = struct {
                         const pong_len = (ws.WsFrame{ .fin = 1, .mask = 0, .opcode = .pong, .payload = frame.payload }).encode(&pong_buf);
                         conn.stream.writeAll(pong_buf[0..pong_len]) catch {};
                     },
-                    .text => {
-                        if (json.buildStatusJson(self.state)) |status_json| {
-                            defer self.state.allocator.free(status_json);
-                            ws.writeText(conn.stream, status_json) catch {};
-                        } else |_| {}
-                    },
+                    .text => self.sendStatusUpdate(conn.stream),
                     else => {},
                 }
 
@@ -282,6 +278,12 @@ pub const Dashboard = struct {
     fn formatNodeKey(self: *Dashboard, node: yam.PeerInfo) ![]u8 {
         const addr_str = node.format();
         return try self.allocator.dupe(u8, std.mem.sliceTo(&addr_str, ' '));
+    }
+
+    fn sendStatusUpdate(self: *Dashboard, stream: net.Stream) void {
+        const status_json = json.buildStatusJson(self.state) catch return;
+        defer self.state.allocator.free(status_json);
+        ws.writeText(stream, status_json) catch {};
     }
 };
 
